@@ -1,0 +1,433 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Document</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        body {
+        font-family: Arial, sans-serif;
+        background-color: #f8f9fa;
+        color: #343a40;
+    }
+
+        h1 {
+            text-align: center;
+            margin-top: 20px;
+            color: #007bff;
+            font-size: 2em;
+        }
+        form#uploadForm {
+        max-width: 500px;
+        margin: 20px auto;
+        padding: 20px;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+    }
+
+    .form-group input[type="file"] {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+    }
+
+
+    #id_p12, #fileInput {
+        width: 100%;
+        padding: 7px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        background: #e9ecef;
+        box-sizing: border-box; 
+    }
+
+    #id_password {
+        width: 100%;
+        padding: 5px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+
+    @media (max-width: 600px) {
+        #id_password, #id_p12, #fileInput {
+            padding: 8px;
+        }
+    }
+
+    button[type="submit"] {
+        display: block;
+        width: 100%;
+        padding: 7px;
+        background-color: #007bff;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        transition: background-color 0.3s ease;
+        margin-top: 4px;
+    }px
+    button[type="submit"]:hover {
+        background-color: #0056b3;
+    }
+
+    @media (max-width: 600px) {
+        form#uploadForm {
+            padding: 10px;
+        }
+
+        button[type="submit"] {
+            font-size: 14px;
+        }
+
+        .form-group input[type="file"] {
+            padding: 6px;
+        }
+    }  
+
+
+
+
+
+        .horizontal-form {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .horizontal-form p {
+            margin-right: 20px;
+            margin-bottom: 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .horizontal-form button {
+            margin-left: 20px;
+        }
+
+        #pdfViewer {
+            width: 595px;
+            height: 842px;
+            overflow: scroll;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            margin-top: 30px; 
+        }
+
+        #pdfViewer canvas {
+            margin-bottom: 10px;
+            border: 1px solid black;
+            width: 100%;
+            height: 100%;
+        }
+
+        #pdfViewer canvas:hover{
+            cursor: url("{% static 'cursor-removebg.png' %}"), auto;
+        }
+        .canvasContainer {
+            z-index: 20;
+        }
+        canvas {
+            display: block;
+            z-index: 10;
+        }
+
+        /*CONTENEDOR SS*/
+        #vista-previa {
+            width: 125px;
+            height: 150px;
+            border: 1px solid rgb(0, 0, 0);
+            margin-top: 20px;
+            position: absolute;
+            margin-top: 10px;
+            margin-left: 10px;
+        }
+
+        .mainSection {
+            align-items: center;
+            width: auto;
+            justify-content: space-evenly;
+            display: flex;
+            flex-direction: row;
+        }
+
+        @media (max-width: 950px) {
+            .mainSection {
+            display: flex;
+            flex-direction: column;
+        }
+        }
+        @media (max-width: 9400px) {
+            .mainSection {
+                align-items: normal;
+            }
+        }
+
+    </style>
+</head>
+<body>
+    <section class="mainSection">
+        <div>
+            <h1>Firmar Documento</h1>
+            <form id="uploadForm" method="POST" enctype="multipart/form-data">
+                {% csrf_token %}
+                {% for field in form %}
+                    {% if field.name == 'pdf' %}
+                        <div class="form-group">
+                            {{ field.label }}
+                            <input type="file" id="fileInput" name="{{ field.name }}" class="form-control" required>
+                        </div>
+                    {% else %}
+                        {% if field.name == 'password' %}
+                        <div class="form-group">
+                            {{ field.label }}
+                            <input type="password" id="id_password" name="{{ field.name }}" class="form-control" required>
+                        </div>
+                        {% else %}
+                        {{ field.label }}
+                        {{ field }}
+                        {% endif %}
+                    {% endif %}
+                {% endfor %}
+                <button type="submit">Subir</button>
+            </form>
+        </div>
+        <div>
+            <div id="result"></div>
+            <div id="pdfViewer"><div id="vista-previa"></div></div>
+        </div>
+    </section>
+    
+    
+
+    
+
+    <script>
+        let coordenadaX = 676;
+        let coordenadaY = 1147;
+        let clickPage = 1
+        let imageUrl = "{% static 'cursor-removebg.png' %}";
+        let $currentImage;
+
+        document.getElementById('fileInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file && file.type === 'application/pdf') {
+                const fileReader = new FileReader();
+                fileReader.onload = function() {
+                    const typedarray = new Uint8Array(this.result);
+                    pdfjsLib.getDocument(typedarray).promise.then(async function(pdf) {
+                        // El PDF se cargó correctamente
+                        console.log('PDF cargado');
+
+                        const pdfViewer = document.getElementById('pdfViewer');
+                        //pdfViewer.innerHTML = '';
+
+                        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+                            const page = await pdf.getPage(pageNumber);
+                            const viewport = page.getViewport({ scale: 1.5 });
+                            const canvas = document.createElement('canvas');
+                            const canvasContainer = document.createElement('div');
+                            const context = canvas.getContext('2d', { willReadFrequently: true });
+                            canvas.height = viewport.height;
+                            canvas.width = viewport.width;
+
+                            // Asignar ID único al canvas
+                            canvas.id = pageNumber;
+                            canvasContainer.className = "canvasContainer"
+                            canvasContainer.id = "canvasContainer-" + pageNumber
+
+                            await page.render({
+                                canvasContext: context,
+                                viewport: viewport
+                            }).promise;
+                            canvasContainer.appendChild(canvas)
+                            
+                            pdfViewer.appendChild(canvasContainer);
+
+                            // Añadir evento onclick al canvas
+                            canvas.onclick = function(event) {
+                                if (screen.width > 595) {
+                                    const rect = canvas.getBoundingClientRect();
+                                    console.log("rect top " + rect.top)
+                                    console.log("event.clientY " + event.clientY)
+                                    const canvasHeight = canvas.height;
+                                    coordenadaX = event.clientX - rect.left + 40;
+                                    coordenadaY = Math.abs(canvasHeight-(event.clientY - rect.top)-348)
+                                    clickPage = canvas.id
+                                    console.log(`Click en canvas ${canvas.id} en posición x: ${coordenadaX}, y: ${coordenadaY}`);
+                                    var parentCanva = $(`#canvasContainer-${canvas.id}`);
+                                    if ($currentImage) {
+                                        $currentImage.remove();
+                                    }
+                                    var xPos = event.pageX;
+                                    var yPos = event.pageY;
+                                    $currentImage = $('<img class="image" id="signedImage">');
+                                    $currentImage.attr('src', imageUrl);
+                                    $currentImage.css({
+                                        top: yPos + 'px',
+                                        left: xPos + 'px',
+                                        zIndex: 30,
+                                        position: "absolute"
+                                        
+                                    });
+                                    $(parentCanva).append($currentImage);
+                                } else {
+                                    const rect = canvas.getBoundingClientRect();
+                                    console.log("rect top " + rect.top)
+                                    console.log("event.clientY " + event.clientY)
+                                    const canvasHeight = canvas.height;
+                                    coordenadaX = event.clientX - rect.left - 40;
+                                    coordenadaY = Math.abs(canvasHeight-(event.clientY - rect.top)-348) + 45
+                                    clickPage = canvas.id
+                                    console.log(`Click en canvas ${canvas.id} en posición x: ${coordenadaX}, y: ${coordenadaY}`);
+                                    var parentCanva = $(`#canvasContainer-${canvas.id}`);
+                                    if ($currentImage) {
+                                        $currentImage.remove();
+                                    }
+                                    var xPos = event.pageX;
+                                    var yPos = event.pageY;
+                                    $currentImage = $('<img class="image" id="signedImage">');
+                                    $currentImage.attr('src', imageUrl);
+                                    $currentImage.css({
+                                        top: yPos -30  + 'px',
+                                        left: xPos - 50 + 'px',
+                                        zIndex: 30,
+                                        position: "absolute"
+                                    });
+                                    $(parentCanva).append($currentImage);
+                                }
+                            };
+                        }
+                    });
+                };
+                fileReader.readAsArrayBuffer(file);
+            } else {
+                document.getElementById('pdfViewer').innerHTML = '<p>Por favor, seleccione un archivo PDF.</p>';
+            }
+        });
+        
+        $('#uploadForm').on('submit', function (e) {
+                e.preventDefault();
+                console.log("Firmado")
+                console.log(`en posición x: ${coordenadaX}, y: ${coordenadaY}`);
+                console.log("Página: " + clickPage)
+                console.log('Coordenadas')
+                var formData = new FormData(this);
+                formData.append("pagina", clickPage)
+                formData.append("coordenadaX", coordenadaX)
+                formData.append("coordenadaY", coordenadaY)
+
+                $.ajax({
+                    url: "{% url 'upload_document' %}",
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function (response) {
+                        alert("Archivo firmado con éxito")
+                        if (response.signed_pdf) {
+                        // Crear un enlace de descarga para el PDF firmado
+                            var link = document.createElement('a');
+                            link.href = 'data:application/pdf;base64,' + response.signed_pdf;
+                            link.download = 'signed_document.pdf';
+                            link.textContent = 'Descargar PDF firmado';
+                            $('#result').append(link);
+                        }
+                    },
+                    error: function (response) {
+                        $('#result').html('<p>' + response.responseJSON.message + '</p>');
+                    }
+                });
+            });
+
+    // SS CÓDIGO PRUEBAS ///////////////////////////////////////////////
+    document.addEventListener('DOMContentLoaded', () => {
+    if (screen.width > 595){
+        const contenedor = document.getElementById('pdfViewer');
+        const vistaPrevia = document.getElementById('vista-previa');
+
+        contenedor.addEventListener('click', (e) => {
+            const rect = contenedor.getBoundingClientRect();
+            const x = e.clientX - rect.left + 60;
+            const y = e.clientY - rect.top + 62.5;
+
+            html2canvas(contenedor).then(canvas => {
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+                // Determinar las coordenadas del área a capturar
+                const captureX = Math.max(0, x - 62.5); // 125px / 2
+                const captureY = Math.max(0, y - 75);   // 150px / 2
+                const captureWidth = Math.min(125, contenedor.offsetWidth - captureX);
+                const captureHeight = Math.min(150, contenedor.offsetHeight - captureY);
+
+                // Crear un nuevo canvas para la vista previa
+                const previewCanvas = document.createElement('canvas');
+                previewCanvas.width = captureWidth;
+                previewCanvas.height = captureHeight;
+                const previewCtx = previewCanvas.getContext('2d', { willReadFrequently: true });
+                
+                // Dibujar el área capturada en el nuevo canvas
+                previewCtx.drawImage(canvas, captureX, captureY, captureWidth, captureHeight, 0, 0, captureWidth, captureHeight);
+
+                // Mostrar la vista previa
+                vistaPrevia.innerHTML = ''; // Limpiar el contenedor de vista previa
+                vistaPrevia.appendChild(previewCanvas);
+                $currentImage.remove();
+            });
+        });
+    } else { //*** COPIAR SS PARA TELEFONO 
+        const contenedor = document.getElementById('pdfViewer');
+        const vistaPrevia = document.getElementById('vista-previa');
+
+        contenedor.addEventListener('click', (e) => {
+            const rect = contenedor.getBoundingClientRect();
+            const scale = window.devicePixelRatio || 1;
+            const x = (e.clientX - rect.left - 40) * scale;
+            const y = (e.clientY - rect.top - 50) * scale;
+
+            html2canvas(contenedor).then(canvas => {
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+                // Determinar las coordenadas del área a capturar
+                const captureX = Math.max(0, x - 62.5 ); // 125px / 2
+                const captureY = Math.max(0, y - 75 );   // 150px / 2
+                const captureWidth = Math.min(125 * scale, canvas.width - captureX);
+                const captureHeight = Math.min(150 * scale, canvas.height - captureY);
+
+                // Crear un nuevo canvas para la vista previa
+                const previewCanvas = document.createElement('canvas');
+                previewCanvas.width = captureWidth / scale;
+                previewCanvas.height = captureHeight / scale;
+                const previewCtx = previewCanvas.getContext('2d', { willReadFrequently: true });
+                
+                // Dibujar el área capturada en el nuevo canvas
+                previewCtx.drawImage(canvas, captureX, captureY, captureWidth, captureHeight, 0, 0, previewCanvas.width, previewCanvas.height);
+
+                // Mostrar la vista previa
+                vistaPrevia.innerHTML = ''; // Limpiar el contenedor de vista previa
+                vistaPrevia.appendChild(previewCanvas);
+                $currentImage.remove();
+            });
+        }); 
+    }
+});
+    </script>
+</body>
+</html>
